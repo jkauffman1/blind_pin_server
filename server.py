@@ -20,6 +20,8 @@ class PINServerECDH(E_ECDH):
 
         private_key, public_key = cls.generate_ec_key_pair()
 
+        print(f'Generated new server public key = {public_key.hex()}')
+
         with open(cls.STATIC_SERVER_PRIVATE_KEY_FILE, 'wb') as f:
             f.write(private_key)
 

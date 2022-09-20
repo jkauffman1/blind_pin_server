@@ -8,16 +8,6 @@ server over Tor.
 In the future we plan to use the pin server in other projects such as Blockstream
 Green.
 
-## To generate a new key
-
-`python -m venv venv`
-
-`. venv/bin/activate`
-
-`pip install --require-hashes -r requirements.txt`
-
-`PYTHONPATH=.. python -m blind_pin_server.generateserverkey`
-
 ## Build the docker image
 
 docker build -f Dockerfile . -t dockerized_pinserver
@@ -27,5 +17,9 @@ docker build -f Dockerfile . -t dockerized_pinserver
 `mkdir pinsdir`
 
 ## Run the docker image (requires the previous steps)
+
+To persist the pin data mount a volume into the `/pins` directory.
+
+To persist the server private key mount a file at `/server_private_key.key`.
 
 `docker run -v $PWD/server_private_key.key:/server_private_key.key -v $PWD/pinsdir:/pins -p 8096:8096 dockerized_pinserver`
