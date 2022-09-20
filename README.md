@@ -10,9 +10,9 @@ Green.
 
 ## Build the docker image
 
-docker build -f Dockerfile . -t dockerized_pinserver
+`docker build -t pinserver .`
 
-## Prepare the directory for all the pins
+## Prepare the directory for all the pins (optional, if you want to persist pins)
 
 `mkdir pinsdir`
 
@@ -23,3 +23,18 @@ To persist the pin data mount a volume into the `/pins` directory.
 To persist the server private key mount a file at `/server_private_key.key`.
 
 `docker run -v $PWD/server_private_key.key:/server_private_key.key -v $PWD/pinsdir:/pins -p 8096:8096 dockerized_pinserver`
+
+If you run the container without mounting any files/volumes it will create ephemeral server keys
+and pins, which is useful in development environments.
+
+`docker run -p 8096:8096 pinserver`
+
+You can verify the server is working on port 8096 like this:
+
+`curl -X POST localhost:8096/start_handshake`
+
+## Devlopment/debugging
+
+It can be useful to bind mount your local filesystem
+
+`docker run -v ${PWD}:/pinserver/ -p 8096:8096 pinserver`
