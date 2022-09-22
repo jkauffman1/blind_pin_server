@@ -1,0 +1,106 @@
+#!/usr/bin/env python
+
+import click
+import functools
+import hmac
+import json
+import os
+
+import requests
+
+import lib
+
+import wallycore as wally
+
+class PinserverProxy:
+
+    def __init__(self, options):
+
+        self.options = options
+
+        # Derive client keys from "id" option (which should ideally be some
+        # unguessable secret, but for dev/testing can just be a fixed string)
+        self.private_key = wally.sha256d(options['id'].encode('utf-8'))
+        wally.ec_private_key_verify(self.private_key)
+        self.public_key = wally.ec_public_key_from_private_key(self.private_key)
+        self.cke = self.public_key
+
+        # Server handshake returns a signed ephemeral public key (ske)
+        response = self.pinserver_post('/start_handshake')
+        self.ske = bytes.fromhex(response['ske'])
+
+        # Verify that the ephemeral server key (ske) is signed with the known
+        # static server public key
+        sig = bytes.fromhex(response['sig'])
+        pubkey = bytes.fromhex(options['pinserver_key'])
+        wally.ec_sig_verify(pubkey, wally.sha256(self.ske), wally.EC_FLAG_ECDSA, sig)
+
+        # Given the pinserver key do a DH key exchange and derive a set of
+        # four other session keys used for subsequent comms
+        master_shared_key = wally.ecdh(self.ske, self.private_key)
+        derived = lambda n: wally.hmac_sha256(master_shared_key, bytearray([n]))
+        keys = {0: 'request_encryption', 1: 'request_hmac', 2: 'response_encryption', 3: 'response_hmac'}
+        self.keys = {name: derived(n) for n, name in keys.items()}
+
+    def pinserver_post(self, endpoint, data=None):
+        url = self.options['pinserver_url'] + endpoint
+        response = requests.post(url, json=data)
+        response.raise_for_status()
+        return json.loads(response.text)
+
+    def sign(self, data):
+        digest = wally.sha256(self.public_key + data)
+        flags = wally.EC_FLAG_ECDSA | wally.EC_FLAG_RECOVERABLE
+        return wally.ec_sig_from_bytes(self.private_key, digest, flags)
+
+    def call_pinserver(self, endpoint, data):
+        ciphertext = lib.encrypt(self.keys['request_encryption'], data + self.sign(data))
+        hmac_ = wally.hmac_sha256(self.keys['request_hmac'], self.public_key + ciphertext)
+        urldata = {'ske': self.ske, 'cke': self.cke, 'encrypted_data': ciphertext, 'hmac_encrypted_data': hmac_}
+        urldata = {k: v.hex() for k, v in urldata.items()}
+
+        response = self.pinserver_post(endpoint, urldata)
+        ciphertext = bytes.fromhex(response['encrypted_key'])
+        hmac_calculated = wally.hmac_sha256(self.keys['response_hmac'], ciphertext)
+        assert hmac.compare_digest(response['hmac'], hmac_calculated.hex())
+        return lib.decrypt(self.keys['response_encryption'], ciphertext)
+
+def with_pinserver_proxy(fn):
+
+    @functools.wraps(fn)
+    @click.pass_context
+    def _inner(ctx, *args, **kwargs):
+        return fn(PinserverProxy(ctx.obj), *args, **kwargs)
+
+    return _inner
+
+@click.group()
+@click.option('--pinserver-url', default='http://localhost:8096', help='url of pinserver')
+@click.option('--id', default='pinclient', help='unique client identifier')
+@click.option('--pinserver-key', type=str, help='Public key of the pinserver in hex')
+@click.pass_context
+def pinclient(ctx, **options):
+    ctx.obj = options
+
+@pinclient.command()
+@click.argument('pin', type=str)
+@with_pinserver_proxy
+def set(pinserver_proxy, pin):
+    """Get a new pin protected encryption key."""
+    pinsecret = wally.sha256d(pin.encode('utf-8'))
+    entropy = os.urandom(32)
+    response = pinserver_proxy.call_pinserver('/set_pin', pinsecret + entropy)
+    print(response.hex())
+
+@pinclient.command()
+@click.argument('pin', type=str)
+@with_pinserver_proxy
+def get(pinserver_proxy, pin):
+    """Retrieve pin protected encryption key."""
+    pinsecret = wally.sha256d(pin.encode('utf-8'))
+    entropy = os.urandom(32)
+    response = pinserver_proxy.call_pinserver('/get_pin', pinsecret + entropy)
+    print(response.hex())
+
+if __name__ == "__main__":
+    pinclient()
