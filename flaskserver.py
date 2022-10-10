@@ -23,8 +23,8 @@ def flask_server():
     if not os.path.exists(PINServerECDH.STATIC_SERVER_PRIVATE_KEY_FILE):
         print(f'Key file not available, creating new {PINServerECDH.STATIC_SERVER_PRIVATE_KEY_FILE}')
         PINServerECDH.generate_server_key_pair()
-    with open(PINServerECDH.STATIC_SERVER_PUBLIC_KEY_FILE, 'rb') as f:
-        pubkey = f.read()
+    with open(PINServerECDH.STATIC_SERVER_PUBLIC_KEY_FILE, 'r') as f:
+        pubkey = bytes.fromhex(f.read())
     print(f'Server starting public key = {pubkey.hex()}')
 
     sessions = {}

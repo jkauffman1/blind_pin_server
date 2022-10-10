@@ -22,11 +22,11 @@ class PINServerECDH(E_ECDH):
 
         print(f'Generated new server public key = {public_key.hex()}')
 
-        with open(cls.STATIC_SERVER_PRIVATE_KEY_FILE, 'wb') as f:
-            f.write(private_key)
+        with open(cls.STATIC_SERVER_PRIVATE_KEY_FILE, 'w') as f:
+            f.write(private_key.hex())
 
-        with open(cls.STATIC_SERVER_PUBLIC_KEY_FILE, 'wb') as f:
-            f.write(public_key)
+        with open(cls.STATIC_SERVER_PUBLIC_KEY_FILE, 'w') as f:
+            f.write(public_key.hex())
 
         print(f'New private key written to file {cls.STATIC_SERVER_PRIVATE_KEY_FILE}')
         print(f'New public key written to file {cls.STATIC_SERVER_PUBLIC_KEY_FILE}')
@@ -34,8 +34,8 @@ class PINServerECDH(E_ECDH):
     @classmethod
     def _load_private_key(cls):
         if not cls.STATIC_SERVER_PRIVATE_KEY:
-            with open(cls.STATIC_SERVER_PRIVATE_KEY_FILE, 'rb') as f:
-                cls.STATIC_SERVER_PRIVATE_KEY = f.read()
+            with open(cls.STATIC_SERVER_PRIVATE_KEY_FILE, 'r') as f:
+                cls.STATIC_SERVER_PRIVATE_KEY = bytes.fromhex(f.read())
                 ec_private_key_verify(cls.STATIC_SERVER_PRIVATE_KEY)
 
     @classmethod
