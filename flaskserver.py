@@ -1,6 +1,7 @@
 import time
 import json
 import os
+import logging
 from flask import Flask, request, jsonify
 from .server import PINServerECDH
 from .pindb import PINDb
@@ -18,17 +19,19 @@ h2b = hex_to_bytes
 load_dotenv()
 SESSION_LIFETIME = int(os.environ.get('SESSION_LIFETIME', 300))
 
+logging.basicConfig(level='INFO')
 
 def flask_server():
+    app = Flask(__name__)
+
     if not os.path.exists(PINServerECDH.STATIC_SERVER_PRIVATE_KEY_FILE):
-        print(f'Key file not available, creating new {PINServerECDH.STATIC_SERVER_PRIVATE_KEY_FILE}')
+        app.logger.info(f'Key file not available, creating new {PINServerECDH.STATIC_SERVER_PRIVATE_KEY_FILE}')
         PINServerECDH.generate_server_key_pair()
     with open(PINServerECDH.STATIC_SERVER_PUBLIC_KEY_FILE, 'r') as f:
         pubkey = bytes.fromhex(f.read())
-    print(f'Server starting public key = {pubkey.hex()}')
+    app.logger.info(f'Server starting public key = {pubkey.hex()}')
 
     sessions = {}
-    app = Flask(__name__)
 
     def _cleanup_expired_sessions():
         nonlocal sessions
