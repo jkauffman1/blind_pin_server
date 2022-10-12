@@ -19,13 +19,6 @@ SESSION_LIFETIME = 30
 
 app = Flask(__name__)
 
-if not os.path.exists(PINServerECDH.STATIC_SERVER_PRIVATE_KEY_FILE):
-    app.logger.info(f'Key file not available, creating new {PINServerECDH.STATIC_SERVER_PRIVATE_KEY_FILE}')
-    PINServerECDH.generate_server_key_pair()
-with open(PINServerECDH.STATIC_SERVER_PUBLIC_KEY_FILE, 'r') as f:
-    pubkey = bytes.fromhex(f.read())
-app.logger.info(f'Server starting public key = {pubkey.hex()}')
-
 sessions = {}
 
 @app.route('/', methods=['GET'])

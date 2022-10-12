@@ -1,66 +1,52 @@
 import time
 from hmac import compare_digest
 import os
-from .lib import decrypt, encrypt, E_ECDH
+import functools
+from .lib import decrypt, encrypt, E_ECDH, ECKeyPair
 from wallycore import ec_private_key_verify, ec_sig_from_bytes, sha256, \
     hmac_sha256, EC_FLAG_ECDSA
 
 
-class PINServerECDH(E_ECDH):
-    STATIC_SERVER_PRIVATE_KEY_FILE = 'server_private_key.key'
-    STATIC_SERVER_PUBLIC_KEY_FILE = 'server_public_key.pub'
-    STATIC_SERVER_PRIVATE_KEY = None
-    STATIC_SERVER_AES_PIN_DATA = None
+STATIC_SERVER_PRIVATE_KEY_FILE = 'server_private_key.key'
 
-    @classmethod
-    def generate_server_key_pair(cls):
-        if os.path.exists(cls.STATIC_SERVER_PRIVATE_KEY_FILE):
-            print(f'Key already exists in file {cls.STATIC_SERVER_PRIVATE_KEY_FILE}')
-            return
+class PersistentKey(ECKeyPair):
 
-        private_key, public_key = cls.generate_ec_key_pair()
+    def __init__(self, filename=STATIC_SERVER_PRIVATE_KEY_FILE):
 
-        print(f'Generated new server public key = {public_key.hex()}')
+        try:
+            with open(filename, 'r') as f:
+                private_key_hex = f.read()
+                private_key = bytes.fromhex(private_key_hex)
+                ECKeyPair.__init__(private_key)
+        except FileNotFoundError:
+            app.logger.info(f'Private key file "{filename}" not found, generating new master key')
+            ECKeyPair.__init__()
+            with open(filename, 'w') as f:
+                f.write(self.private_key.hex())
 
-        with open(cls.STATIC_SERVER_PRIVATE_KEY_FILE, 'w') as f:
-            f.write(private_key.hex())
+        app.logger.info('Server master public key = {self.public_key.hex()}')
 
-        with open(cls.STATIC_SERVER_PUBLIC_KEY_FILE, 'w') as f:
-            f.write(public_key.hex())
-
-        print(f'New private key written to file {cls.STATIC_SERVER_PRIVATE_KEY_FILE}')
-        print(f'New public key written to file {cls.STATIC_SERVER_PUBLIC_KEY_FILE}')
-
-    @classmethod
-    def _load_private_key(cls):
-        if not cls.STATIC_SERVER_PRIVATE_KEY:
-            with open(cls.STATIC_SERVER_PRIVATE_KEY_FILE, 'r') as f:
-                cls.STATIC_SERVER_PRIVATE_KEY = bytes.fromhex(f.read())
-                ec_private_key_verify(cls.STATIC_SERVER_PRIVATE_KEY)
-
-    @classmethod
-    def _sign_with_static_key(cls, msg):
-        cls._load_private_key()
-
+    def sign(self, msg):
         hashed = sha256(msg)
-        return ec_sig_from_bytes(cls.STATIC_SERVER_PRIVATE_KEY,
-                                 hashed,
-                                 EC_FLAG_ECDSA)
+        return ec_sig_from_bytes(self.private_key, hashed, EC_FLAG_ECDSA)
 
-    @classmethod
-    def _get_aes_pin_data_key(cls):
-        cls._load_private_key()
-        if not cls.STATIC_SERVER_AES_PIN_DATA:
-            cls.STATIC_SERVER_AES_PIN_DATA = hmac_sha256(cls.STATIC_SERVER_PRIVATE_KEY, b'pin_data')
-        return cls.STATIC_SERVER_AES_PIN_DATA
+    @functools.lru_cache(maxsize=None)
+    def hmac_sha256(self, key):
+        return hmac_sha256(self.private_key, key)
 
-    # Instance methods
+static_server_key = None
+
+class PINServerECDH(E_ECDH):
+
     def __init__(self):
+        if static_server_key is None:
+            static_server_key = PersistentKey()
+
         super().__init__()
         self.time_started = int(time.time())
 
     def get_signed_public_key(self):
-        return self.public_key, self._sign_with_static_key(self.public_key)
+        return self.public_key, static_server_key.sign(self.public_key)
 
     # Decrypt the received payload (ie. aes-key)
     def decrypt_request_payload(self, cke, encrypted, hmac):
@@ -84,7 +70,7 @@ class PINServerECDH(E_ECDH):
         payload = self.decrypt_request_payload(cke, encrypted, hmac)
 
         # Call the passed function with the decrypted payload
-        response = func(cke, payload, self._get_aes_pin_data_key())
+        response = func(cke, payload, static_server_key.hmac_sha256(b'pin_data'))
 
         encrypted, hmac = self.encrypt_response_payload(response)
         return encrypted, hmac

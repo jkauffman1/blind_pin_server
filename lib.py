@@ -17,28 +17,30 @@ def decrypt(aes_key, encrypted):
     return aes_cbc(aes_key, iv, payload, AES_FLAG_DECRYPT)
 
 
-class E_ECDH(object):
+def _generate_private_key():
+    counter = 4
+    while counter:
+        private_key = os.urandom(32)
+        try:
+            ec_private_key_verify(private_key)
+            return private_key
+        except Exception:
+            counter -= 1
+    raise Exception
 
-    @classmethod
-    def _generate_private_key(cls):
-        counter = 4
-        while counter:
-            private_key = os.urandom(32)
-            try:
-                ec_private_key_verify(private_key)
-                return private_key
-            except Exception:
-                counter -= 1
-        raise Exception
 
-    @classmethod
-    def generate_ec_key_pair(cls):
-        private_key = cls._generate_private_key()
-        public_key = ec_public_key_from_private_key(private_key)
-        return private_key, public_key
+class ECKeyPair:
+
+    def __init__(self, private_key=None):
+        self.private_key = private_key or _generate_private_key()
+        ec_private_key_verify(private_key)
+        self.public_key = ec_public_key_from_private_key(self.private_key)
+
+
+class E_ECDH(ECKeyPair):
 
     def __init__(self):
-        self.private_key, self.public_key = self.generate_ec_key_pair()
+        ECKeyPair.__init__()
 
     def generate_shared_secrets(self, public_key):
         master_shared_key = ecdh(public_key, self.private_key)
