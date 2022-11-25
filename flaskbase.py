@@ -2,7 +2,7 @@ import time
 import json
 import os
 from flask import Flask, request, jsonify
-from .server import PINServerECDH
+from . import server
 from wallycore import hex_from_bytes, hex_to_bytes, AES_KEY_LEN_256, \
     AES_BLOCK_LEN
 
@@ -30,7 +30,7 @@ def start_handshake_route():
     app.logger.debug('Number of sessions {}'.format(len(sessions)))
 
     # Create a new ephemeral server/session and get its signed pubkey
-    e_ecdh_server = PINServerECDH()
+    e_ecdh_server = server.PINServerECDH()
     pubkey, sig = e_ecdh_server.get_signed_public_key()
     ske = b2h(pubkey)
 
@@ -40,7 +40,8 @@ def start_handshake_route():
 
     # Return response
     return jsonify({'ske': ske,
-                    'sig': b2h(sig)})
+                    'sig': b2h(sig),
+                    'pubkey': server.static_server_key.public_key.hex()})
 
 def cleanup_expired_sessions():
     global sessions

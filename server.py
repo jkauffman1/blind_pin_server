@@ -6,6 +6,8 @@ from .lib import decrypt, encrypt, E_ECDH, ECKeyPair
 from wallycore import ec_private_key_verify, ec_sig_from_bytes, sha256, \
     hmac_sha256, EC_FLAG_ECDSA
 
+import logging
+logging.basicConfig(level=logging.DEBUG)
 
 STATIC_SERVER_PRIVATE_KEY_FILE = 'server_private_key.key'
 
@@ -17,14 +19,14 @@ class PersistentKey(ECKeyPair):
             with open(filename, 'r') as f:
                 private_key_hex = f.read()
                 private_key = bytes.fromhex(private_key_hex)
-                ECKeyPair.__init__(private_key)
+                ECKeyPair.__init__(self, private_key)
         except FileNotFoundError:
-            app.logger.info(f'Private key file "{filename}" not found, generating new master key')
-            ECKeyPair.__init__()
+            logging.info(f'Private key file "{filename}" not found, generating new master key')
+            ECKeyPair.__init__(self)
             with open(filename, 'w') as f:
                 f.write(self.private_key.hex())
 
-        app.logger.info('Server master public key = {self.public_key.hex()}')
+        logging.info(f'Server master public key = {self.public_key.hex()}')
 
     def sign(self, msg):
         hashed = sha256(msg)
@@ -39,6 +41,7 @@ static_server_key = None
 class PINServerECDH(E_ECDH):
 
     def __init__(self):
+        global static_server_key
         if static_server_key is None:
             static_server_key = PersistentKey()
 

@@ -1,5 +1,8 @@
 import os
 
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
 from wallycore import AES_BLOCK_LEN, AES_FLAG_DECRYPT, AES_FLAG_ENCRYPT, \
     aes_cbc, ec_private_key_verify, ec_public_key_from_private_key, ecdh, \
     hmac_sha256
@@ -33,14 +36,14 @@ class ECKeyPair:
 
     def __init__(self, private_key=None):
         self.private_key = private_key or _generate_private_key()
-        ec_private_key_verify(private_key)
+        ec_private_key_verify(self.private_key)
         self.public_key = ec_public_key_from_private_key(self.private_key)
 
 
 class E_ECDH(ECKeyPair):
 
     def __init__(self):
-        ECKeyPair.__init__()
+        ECKeyPair.__init__(self)
 
     def generate_shared_secrets(self, public_key):
         master_shared_key = ecdh(public_key, self.private_key)

@@ -29,11 +29,20 @@ class PinserverProxy:
         response = self.pinserver_post('/start_handshake')
         self.ske = bytes.fromhex(response['ske'])
 
+        # If the server's pubkey was explicitly passed check it matches the one from
+        # the server response. If it doesn't there's no point checking the signature.
+        # If the server's pubkey was not passed simply trust the one provided by the
+        # server
+        require_pubkey = options['pinserver_key']
+        server_pubkey = response['pubkey']
+        if require_pubkey and require_pubkey != server_pubkey:
+            raise click.ClickException('Server\'s pubkey incorrect')
+
         # Verify that the ephemeral server key (ske) is signed with the known
         # static server public key
         sig = bytes.fromhex(response['sig'])
-        pubkey = bytes.fromhex(options['pinserver_key'])
-        wally.ec_sig_verify(pubkey, wally.sha256(self.ske), wally.EC_FLAG_ECDSA, sig)
+        server_pubkey = bytes.fromhex(server_pubkey)
+        wally.ec_sig_verify(server_pubkey, wally.sha256(self.ske), wally.EC_FLAG_ECDSA, sig)
 
         # Given the pinserver key do a DH key exchange and derive a set of
         # four other session keys used for subsequent comms
@@ -81,6 +90,13 @@ def with_pinserver_proxy(fn):
 @click.pass_context
 def pinclient(ctx, **options):
     ctx.obj = options
+
+@pinclient.command()
+@click.argument('data', type=str)
+@with_pinserver_proxy
+def echo(pinserver_proxy, data):
+    response = pinserver_proxy.call_pinserver('/echo', data.encode('utf-8'))
+    print(response.hex())
 
 @pinclient.command()
 @click.argument('pin', type=str)
